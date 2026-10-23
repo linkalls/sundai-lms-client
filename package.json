@@ -1,0 +1,26 @@
+{
+  "name": "sundai-lms-client",
+  "version": "0.1.0",
+  "description": "Unofficial Bun/TypeScript client for a student's own Sundai LMS data",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/core.ts"
+  },
+  "bin": {
+    "sundai-lms": "./bin/sundai-lms.ts"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,31 @@
+# Dependencies, caches, generated output
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+
+# Personal account data, authentication, and local monitoring state
+.local/
+private/
+*.session.json
+*sundai*lms*session*.json
+*exam*results*.json
+*exam*export*.json
+sundai-lms-export.json
+sundai-lms-session.json
+session.json
+export.json
+exams.json
+profile.json
+
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.sqlite3
