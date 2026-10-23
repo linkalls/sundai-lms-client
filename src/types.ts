@@ -73,8 +73,23 @@ export interface UserDetails extends LmsResource {
 export interface LmsDocument extends LmsResource {
   name?: string;
   filename?: string;
+  displayName?: string;
   documentType?: string;
   fileUrl?: string;
+}
+
+/** A file attached to a student-visible announcement. */
+export interface ContactAttachment extends LmsResource {
+  document?: LmsDocument;
+}
+
+/** One downloadable attachment, preserving its streaming HTTP response. */
+export interface DownloadedContactAttachment {
+  attachmentId: number | string;
+  documentId?: number | string;
+  fileName: string;
+  contentType: string | null;
+  response: Response;
 }
 
 export interface Contact extends LmsResource {
@@ -84,7 +99,7 @@ export interface Contact extends LmsResource {
   read?: boolean;
   tags?: LmsResource[];
   userContactTags?: LmsResource[];
-  contactAttachments?: Array<LmsResource & { document?: LmsDocument }>;
+  contactAttachments?: ContactAttachment[];
 }
 
 export interface Handout extends LmsResource {

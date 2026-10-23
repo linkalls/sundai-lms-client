@@ -1,7 +1,7 @@
 export { SUNDAI_LMS_API_BASE_URL, SundaiLmsApiError, SundaiLmsClient } from "./client";
 export { loadSession, saveSession } from "./session";
 export type {
-  CalendarEntry,
+  CalendarEntry, ContactAttachment, DownloadedContactAttachment,
   Chat,
   Contact,
   ExportOptions,

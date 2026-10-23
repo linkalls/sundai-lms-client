@@ -137,3 +137,129 @@ describe("student read-only endpoints", () => {
     expect(myChat.chatMessages).toEqual([{ id: 1 }]);
   });
 });
+
+describe("announcement attachments", () => {
+  const auth = { token: "test-token", client: "test-client", uid: "test-uid" };
+
+  test("downloads every PDF of a multi-attachment announcement without marking it read", async () => {
+    const requested: string[] = [];
+    const client = new SundaiLmsClient({
+      auth,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        requested.push(`${request.method} ${request.url}`);
+
+        if (request.url.endsWith("/api/contacts/7")) {
+          return Response.json({
+            id: 7,
+            title: "Example notice",
+            contact_attachments: [
+              {
+                id: 21,
+                document: {
+                  id: 101,
+                  display_name: "first.pdf",
+                  document_type: "application/pdf",
+                  file_url: "/documents/101/file",
+                },
+              },
+              {
+                id: 22,
+                document: {
+                  id: 102,
+                  display_name: "second.pdf",
+                  document_type: "application/pdf",
+                  file_url: "/documents/102/file",
+                },
+              },
+              {
+                id: 23,
+                document: {
+                  id: 103,
+                  display_name: "third.pdf",
+                  document_type: "application/pdf",
+                  file_url: "/api/documents/103/file",
+                },
+              },
+            ],
+          });
+        }
+
+        const url = new URL(request.url);
+        if (/^\/api\/documents\/(101|102|103)\/file$/.test(url.pathname)) {
+          return new Response(new TextEncoder().encode(`pdf-content-${url.pathname.split("/")[3]}`), {
+            status: 200,
+            headers: { "content-type": "application/pdf" },
+          });
+        }
+
+        throw new Error(`Unexpected test request: ${request.url}`);
+      },
+    });
+
+    const files = await client.downloadContactAttachments(7);
+    expect(files).toHaveLength(3);
+    expect(files.map((file) => file.fileName)).toEqual(["first.pdf", "second.pdf", "third.pdf"]);
+    expect(files.map((file) => file.contentType)).toEqual(["application/pdf", "application/pdf", "application/pdf"]);
+    expect(await Promise.all(files.map((file) => file.response.text()))).toEqual([
+      "pdf-content-101", "pdf-content-102", "pdf-content-103",
+    ]);
+    expect(requested).toEqual([
+      "GET https://api.lms.sundai-edfu.com/api/contacts/7",
+      "GET https://api.lms.sundai-edfu.com/api/documents/101/file",
+      "GET https://api.lms.sundai-edfu.com/api/documents/102/file",
+      "GET https://api.lms.sundai-edfu.com/api/documents/103/file",
+    ]);
+  });
+
+  test("retrieves a missing document URL using its metadata endpoint", async () => {
+    const requested: string[] = [];
+    const client = new SundaiLmsClient({
+      auth,
+      fetch: async (input) => {
+        const url = new URL(String(input));
+        requested.push(url.pathname);
+        if (url.pathname === "/api/contacts/8") {
+          return Response.json({ id: 8, contact_attachments: [{ id: 31, document: { id: 501 } }] });
+        }
+        if (url.pathname === "/api/documents/501") {
+          return Response.json({ id: 501, display_name: "attachment.pdf", file_url: "/documents/501/file" });
+        }
+        if (url.pathname === "/api/documents/501/file") {
+          return new Response("attachment bytes", { headers: { "content-type": "application/pdf" } });
+        }
+        throw new Error(`Unexpected test path: ${url.pathname}`);
+      },
+    });
+
+    const files = await client.downloadContactAttachments(8);
+    expect(files).toHaveLength(1);
+    expect(files[0]?.fileName).toBe("attachment.pdf");
+    expect(await files[0]?.response.text()).toBe("attachment bytes");
+    expect(requested).toEqual(["/api/contacts/8", "/api/documents/501", "/api/documents/501/file"]);
+  });
+
+  test("returns an empty array when the notice has no attachments", async () => {
+    const client = new SundaiLmsClient({
+      auth,
+      fetch: async () => Response.json({ id: 2, contact_attachments: [] }),
+    });
+    expect(await client.downloadContactAttachments(2)).toEqual([]);
+  });
+
+  test("rejects an external URL before sending authentication headers", async () => {
+    let requests = 0;
+    const client = new SundaiLmsClient({
+      auth,
+      fetch: async () => {
+        requests += 1;
+        throw new Error("Unexpected network request");
+      },
+    });
+
+    await expect(client.downloadDocumentUrl("https://example.invalid/file.pdf")).rejects.toThrow(
+      "Refusing to send LMS credentials",
+    );
+    expect(requests).toBe(0);
+  });
+});

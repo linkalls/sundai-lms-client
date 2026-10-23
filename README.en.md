@@ -19,7 +19,7 @@
 ## Features
 
 - Read mock-exam scores, maximum scores, deviations, and university application judgments.
-- Retrieve announcements, personal notifications, handouts, PDF files, and surveys.
+- Retrieve announcements, personal notifications, handouts, multiple PDF attachments, and surveys.
 - Access subjects, teachers, learning activity statistics, calendar entries, and interview booking slots.
 - Export supported personal LMS data to local JSON files.
 
@@ -135,6 +135,48 @@ const calendar = await client.listCalendarEntries("20261001", "20261115");
 console.log(`Calendar events: ${calendar.items.length}`);
 ```
 
+### Download every file attached to an announcement
+
+`GET /contacts/:id` includes an array named `contact_attachments`. The `downloadContactAttachments(id)` helper fetches each attached document in sequence and returns its filename, content type, and an unread `Response` object. It does not mark the notice as read.
+
+Save the following as `download-notice.ts` at the repository root, then run `bun run download-notice.ts 123` with an announcement ID available to your own account.
+
+```ts
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { SundaiLmsClient, loadSession } from "./src/index.ts";
+
+// Create an API client using your own private session.
+const session = await loadSession("sundai-lms-session.json");
+const client = SundaiLmsClient.fromSession(session);
+
+// Require a notice ID supplied explicitly by the caller.
+const contactId = Bun.argv[2];
+if (!contactId) {
+  throw new Error("Usage: bun run download-notice.ts <contact-id>");
+}
+
+// Download every available file attachment without changing the read state.
+const files = await client.downloadContactAttachments(contactId);
+await mkdir("downloads", { recursive: true, mode: 0o700 });
+
+for (const [index, file] of files.entries()) {
+  // Sanitize the filename and add an index to avoid collisions.
+  const safeName = file.fileName.replace(/[\\/<>:"|?*\x00-\x1f]/g, "_");
+  const filename = `${String(index + 1).padStart(2, "0")}-${safeName}`;
+  const output = join("downloads", filename);
+
+  // Save the original bytes, whether PDF or another supported file type.
+  const bytes = new Uint8Array(await file.response.arrayBuffer());
+  await writeFile(output, bytes, { mode: 0o600 });
+  console.log(`Saved: ${output}`);
+}
+
+console.log(`Downloaded ${files.length} files`);
+```
+
+**Verification:** Unit tests cover multiple PDF attachments, URL normalization, missing metadata, and empty attachment lists. The 197 personal announcements reviewed on October 23, 2026 contained no attachments, so a real multi-PDF notice was not available for end-to-end testing.
+
 ### Response normalization
 
 The LMS returns `snake_case` JSON keys. The library recursively converts them to `camelCase`:
@@ -166,6 +208,7 @@ These are the main implemented **student-scoped read methods**, based on the fro
 | `getProfile()` | GET | `/users/me` |
 | `getMyDetail()` / `getExamResults()` | GET | `/users/my_detail` |
 | `listContacts()` / `getContact(id)` | GET | `/contacts` / `/contacts/:id` |
+| `downloadContactAttachments(id)` | GET | `/contacts/:id` + each file URL |
 | `listUserNotifications()` / `listFullUserNotifications()` | GET | `/user_notifications` / `/user_notifications/full` |
 | `listHandouts()` / `getHandoutFile(id)` | GET | `/handouts` / `/handouts/:id/file` |
 | `listHandoutCategories()` / `listHandoutTags()` | GET | `/handout_categories/list` / `/handout_tags/list` |

@@ -20,7 +20,7 @@
 
 - **模試成績の取得** — 得点、満点、偏差値、志望校判定を取得
 - **お知らせ・通知の取得** — 一覧、本文、添付資料の情報
-- **配布資料の取得** — 一覧やPDFダウンロード
+- **配布資料・お知らせ添付ファイルの取得** — PDFを含む複数ファイルの取得に対応
 - **学習情報の取得** — 科目、講師、学習活動、アンケート
 - **予定の取得** — カレンダー、面談予約枠
 - **個人データのエクスポート** — JSONとしてローカル保存
@@ -148,6 +148,54 @@ console.log(`カレンダー: ${calendar.items.length}件`);
 bun run example.ts
 ```
 
+### お知らせの添付ファイルをすべて保存する
+
+`GET /contacts/:id` の `contact_attachments` は配列であり、1件のお知らせに複数の文書が添付される場合がある。`downloadContactAttachments(id)` はお知らせ詳細を取得し、添付された文書のURLを順番に取得する。戻り値にはファイル名、Content-Type、未消費の `Response` が含まれる。
+
+以下の例は、**リポジトリ直下で `download-notice.ts` として実行する完全なコード**。`CONTACT_ID` には、本人に公開されたお知らせのIDを指定する。
+
+```ts
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { SundaiLmsClient, loadSession } from "./src/index.ts";
+
+// ローカルの本人用セッションからAPIクライアントを作成する。
+const session = await loadSession("sundai-lms-session.json");
+const client = SundaiLmsClient.fromSession(session);
+
+// コマンドライン引数からお知らせIDを取得する。
+const contactId = Bun.argv[2];
+if (!contactId) {
+  throw new Error("Usage: bun run download-notice.ts <contact-id>");
+}
+
+// お知らせに添付されたファイルをすべて取得する。
+// 既読化など、アカウントを変更するAPIは呼び出さない。
+const files = await client.downloadContactAttachments(contactId);
+
+// 添付が存在しない場合は空配列になる。
+await mkdir("downloads", { recursive: true, mode: 0o700 });
+for (const [index, file] of files.entries()) {
+  // ファイル名をサニタイズし、通し番号で名前の衝突を避ける。
+  const safeName = file.fileName.replace(/[\\/<>:"|?*\x00-\x1f]/g, "_");
+  const name = `${String(index + 1).padStart(2, "0")}-${safeName}`;
+  const destination = join("downloads", name);
+
+  // PDFに限らず、元のバイナリ形式のまま保存する。
+  const bytes = new Uint8Array(await file.response.arrayBuffer());
+  await writeFile(destination, bytes, { mode: 0o600 });
+  console.log(`Saved: ${destination}`);
+}
+
+console.log(`添付ファイル取得数: ${files.length}`);
+```
+
+```bash
+bun run download-notice.ts 123
+```
+
+**検証状況：** 複数PDF、URLの補完、添付なし、メタデータ再取得の処理はモックによる自動テスト済み。2026年10月23日の本人アカウントのお知らせ197件では添付ファイルが確認できなかったため、複数添付の実データを使ったダウンロード検証は未実施。
+
 ### レスポンスの正規化
 
 LMSのレスポンスに含まれる `snake_case` のキー名は、クライアント側で再帰的に `camelCase` へ変換される。
@@ -179,6 +227,7 @@ const exams = await client.getExamResults();
 | `getProfile()` | GET | `/users/me` |
 | `getMyDetail()` / `getExamResults()` | GET | `/users/my_detail` |
 | `listContacts()` | GET | `/contacts` |
+| `downloadContactAttachments(id)` | GET | `/contacts/:id` + 添付ファイルURL |
 | `getContact(id)` | GET | `/contacts/:id` |
 | `listUserNotifications()` | GET | `/user_notifications` |
 | `listFullUserNotifications()` | GET | `/user_notifications/full` |

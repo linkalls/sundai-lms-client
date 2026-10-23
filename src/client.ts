@@ -2,6 +2,7 @@ import type {
   CalendarEntry,
   Chat,
   Contact,
+  DownloadedContactAttachment,
   ExportOptions,
   UserDetails,
   Handout,
@@ -212,6 +213,50 @@ export class SundaiLmsClient {
     return this.getJson<Contact>(`contacts/${encodeURIComponent(String(id))}`);
   }
 
+  /**
+   * Retrieves every attached file from one of the current student's announcements.
+   *
+   * An announcement can contain multiple `contact_attachments`, each with a
+   * distinct document and download URL. Downloads are performed sequentially to
+   * avoid excessive requests to the LMS. Response bodies are left unconsumed so
+   * callers can stream them directly to a file without buffering the whole PDF.
+   *
+   * This method never marks the announcement as read and does not write to disk.
+   */
+  public async downloadContactAttachments(id: string | number): Promise<DownloadedContactAttachment[]> {
+    const contact = await this.getContact(id);
+    const attachments = contact.contactAttachments ?? [];
+    const files: DownloadedContactAttachment[] = [];
+
+    for (const [index, attachment] of attachments.entries()) {
+      const original = attachment.document;
+      if (!original) {
+        throw new Error(`Announcement attachment ${index + 1} has no document metadata`);
+      }
+
+      // The LMS usually embeds complete document metadata in contact details.
+      // Some responses include only the document ID, requiring one detail GET.
+      if (!original.fileUrl && (original.id === undefined || original.id === null)) {
+        throw new Error(`Announcement attachment ${index + 1} has no document ID or download URL`);
+      }
+      const document = original.fileUrl ? original : await this.getDocument(original.id);
+      if (!document.fileUrl) {
+        throw new Error(`Announcement attachment ${index + 1} has no download URL`);
+      }
+
+      const response = await this.downloadDocumentUrl(document.fileUrl);
+      files.push({
+        attachmentId: attachment.id,
+        documentId: original.id,
+        fileName: document.displayName || document.filename || document.name || `attachment-${index + 1}`,
+        contentType: response.headers.get("content-type"),
+        response,
+      });
+    }
+
+    return files;
+  }
+
   /** Marks an announcement as read in the LMS. */
   public async markContactRead(id: string | number): Promise<void> {
     await this.requestJson<void>(`contacts/${encodeURIComponent(String(id))}/read`, { method: "POST" });
@@ -292,10 +337,23 @@ export class SundaiLmsClient {
 
   /** Downloads a document URL included in a read-only LMS response. */
   public async downloadDocumentUrl(url: string): Promise<Response> {
-    const target = new URL(url, `${this.baseUrl}/`);
-    const apiOrigin = new URL(this.baseUrl).origin;
-    if (target.origin !== apiOrigin && target.origin !== "https://lms.sundai-edfu.com") {
+    // The LMS frontend returns URLs such as `/documents/123/file`.
+    // Axios prepends its `/api` base path to these, while `new URL()` does not.
+    // Normalize this explicitly so binary downloads reach the correct route.
+    const base = new URL(`${this.baseUrl}/`);
+    const input = url.trim();
+    if (!input) throw new Error("Missing LMS document URL");
+    const apiPath = base.pathname.replace(/\/+$/, "");
+    const apiRelativePath = input.startsWith("/") && !input.startsWith("//")
+      && input !== apiPath && !input.startsWith(`${apiPath}/`)
+      ? `${apiPath}${input}` : input;
+    const target = new URL(apiRelativePath, base);
+    const apiOrigin = base.origin;
+    if (![apiOrigin, "https://lms.sundai-edfu.com"].includes(target.origin)) {
       throw new Error(`Refusing to send LMS credentials to an unexpected origin: ${target.origin}`);
+    }
+    if (target.protocol !== "https:") {
+      throw new Error("LMS document URLs must use HTTPS");
     }
     return this.request(target);
   }
