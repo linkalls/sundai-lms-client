@@ -2,7 +2,7 @@
 
 # sundai-lms-client
 
-**駿台LMSの自分のデータを、Bun + TypeScriptから扱う非公式APIクライアント**
+**駿台LMSの学生本人向けAPIを利用する非公式Bun / TypeScriptクライアント**
 
 [![CI](https://github.com/linkalls/sundai-lms-client/actions/workflows/ci.yml/badge.svg)](https://github.com/linkalls/sundai-lms-client/actions/workflows/ci.yml)
 ![Bun](https://img.shields.io/badge/runtime-Bun-14151A?logo=bun&logoColor=white)
@@ -14,9 +14,9 @@
 </div>
 
 > [!IMPORTANT]
-> **非公式・実験的なプロジェクト。** 駿台および駿台LMSの運営元とは無関係だよ。公開フロントエンドから確認したAPIを利用しており、仕様変更により突然動作しなくなる場合がある。**自分のアカウントで閲覧を許可されたデータだけ**を扱い、サービスの利用規約を守ってね。
+> **本プロジェクトは非公式の実験的実装であり、駿台および駿台LMSの運営元とは関係がない。** 公開フロントエンドで確認されたAPIを使用するため、仕様変更によって動作しなくなる可能性がある。利用対象は**本人のアカウントで閲覧を許可されたデータ**に限定し、サービスの利用規約を遵守すること。
 
-## できること
+## 主な機能
 
 - **模試成績の取得** — 得点、満点、偏差値、志望校判定を取得
 - **お知らせ・通知の取得** — 一覧、本文、添付資料の情報
@@ -25,13 +25,13 @@
 - **予定の取得** — カレンダー、面談予約枠
 - **個人データのエクスポート** — JSONとしてローカル保存
 
-このリポジトリは**APIクライアントとCLIのみ**。Expo / React Native / Androidアプリは含まない。npmへの公開もまだ行っていないよ。
+本リポジトリには**APIクライアントおよびCLIのみ**を収録する。Expo、React Native、Androidアプリは含まれない。npmパッケージとしては未公開。
 
 ## クイックスタート
 
 ### 1. インストール
 
-[Bun](https://bun.sh/) 1.2以降が必要。
+実行環境には[Bun](https://bun.sh/) 1.2以降が必要。
 
 ```bash
 git clone https://github.com/linkalls/sundai-lms-client.git
@@ -39,33 +39,33 @@ cd sundai-lms-client
 bun install
 ```
 
-### 2. ログインセッションを用意
+### 2. 認証セッションの準備
 
-LMSにアクセスするには、**本人の有効な認証セッション**が必要。メールアドレスとパスワードを使うSSOヘルパーを同梱しているけど、**現行のログイン画面との互換性は未検証**なので、動作保証はない。
+LMSへのアクセスには、**本人の有効な認証セッション**が必要となる。メールアドレスとパスワードを使用するSSO認証ヘルパーを同梱している。ただし、**現行の認証フローとの互換性は未検証**であり、正常動作は保証されない。
 
 ```bash
-# Bashで実行。秘密情報をコマンド履歴に残さないよう対話入力する。
+# Bashで対話入力し、認証情報をコマンド履歴へ記録しない。
 read -r -p 'LMS email: ' SUNDAI_LMS_EMAIL
 read -r -s -p 'LMS password: ' SUNDAI_LMS_PASSWORD
 printf '\n'
 export SUNDAI_LMS_EMAIL SUNDAI_LMS_PASSWORD
 
-# 成功すると sundai-lms-session.json が生成される
+# 認証成功時に sundai-lms-session.json を生成する。
 bun run bin/sundai-lms.ts login
 
-# 認証情報をシェル環境から消す
+# 使用後は認証情報を環境変数から削除する。
 unset SUNDAI_LMS_EMAIL SUNDAI_LMS_PASSWORD
 ```
 
-セッションファイルには認証トークンが保存される。**パスワードと同じ強さで保護**してね。作成されるセッションファイルは所有者のみアクセス可能な `0600` 権限になる（Unix系OS）。SSOが使えない場合は、有効な本人用 `SundaiLmsSession` をプログラムから渡すこともできる。
+セッションファイルには認証トークンが保存されるため、**パスワードと同等の機密情報として管理する必要がある**。Unix系OSでは、生成時のファイル権限は所有者のみ読み書き可能な `0600` に設定される。SSOヘルパーを利用できない場合は、有効な本人用 `SundaiLmsSession` をプログラムから渡すことも可能。
 
-### 3. 模試成績を取得
+### 3. 模試成績の取得
 
 ```bash
 bun run bin/sundai-lms.ts exams
 ```
 
-成功すると、本人の `exam_results.items` を `exams.json` に出力する。データは`camelCase`に正規化される。
+取得に成功した場合、`exam_results.items` の内容が `exams.json` に出力される。JSONのキー名は `camelCase` に正規化される。
 
 ```json
 {
@@ -95,9 +95,9 @@ bun run bin/sundai-lms.ts exams
 }
 ```
 
-<sub>上のJSONは**構造の説明用に作った架空データ**。実際の成績、個人情報、セッショントークンはこのリポジトリに含まない。</sub>
+**注記：** 上記のJSONはレスポンス構造を説明するための架空データである。実際の成績、個人情報、セッショントークンは本リポジトリに含まれない。
 
-## CLIコマンド
+## CLIリファレンス
 
 | コマンド | 動作 | 既定の出力 |
 | --- | --- | --- |
@@ -106,21 +106,21 @@ bun run bin/sundai-lms.ts exams
 | `bun run bin/sundai-lms.ts profile` | プロフィール詳細を取得（模試を含む） | `profile.json` |
 | `bun run bin/sundai-lms.ts export` | お知らせ、配布資料などをまとめて取得 | `export.json` |
 
-`exams`、`profile`、`export` は既存セッションを使用し、**読み取りのみ**を行う。引数で保存先を変更できるよ。
+`exams`、`profile`、`export` は保存済みセッションを使用し、**読み取り処理のみ**を実行する。出力先はコマンドライン引数で指定できる。
 
 ```bash
-# [session.json] [output.json] の順で指定
+# 引数は [session.json] [output.json] の順に指定する。
 bun run bin/sundai-lms.ts exams sundai-lms-session.json my-exams.json
 bun run bin/sundai-lms.ts profile sundai-lms-session.json my-profile.json
 bun run bin/sundai-lms.ts export sundai-lms-session.json my-export.json
 ```
 
 > [!WARNING]
-> `exams.json` などの**既定のファイル名だけ**を `.gitignore` で除外している。任意の名前で出力した個人データは、自分でGit管理の対象外にしてね。また、`export` の対象は実装されているデータカテゴリに限定され、模試成績の取得は `exams` / `profile` を使う。カレンダーは既定で日本時間の当日から前後31日を対象とする。
+> `.gitignore` で除外されるのは、`exams.json` などの**既定のファイル名に限られる**。任意のファイル名で出力する場合、個人情報を含むファイルは別途Git管理対象から除外すること。`export` は実装済みのデータカテゴリのみを対象とし、模試成績の取得には `exams` または `profile` を使用する。カレンダーの既定の対象期間は、日本時間の当日を中心とした前後31日間。
 
-## TypeScriptから使う
+## TypeScriptからの利用
 
-以下は、リポジトリ直下に `example.ts` として保存して実行できる例。
+以下のコードをリポジトリ直下の `example.ts` に保存して実行する。
 
 ```ts
 import { SundaiLmsClient, loadSession } from "./src/index.ts";
@@ -148,9 +148,9 @@ console.log(`カレンダー: ${calendar.items.length}件`);
 bun run example.ts
 ```
 
-### JSONのキー名について
+### レスポンスの正規化
 
-LMSが返す `snake_case` を、クライアントは再帰的に `camelCase` に変換する。
+LMSのレスポンスに含まれる `snake_case` のキー名は、クライアント側で再帰的に `camelCase` へ変換される。
 
 | LMSからの生レスポンス | TypeScriptでの取得値 |
 | --- | --- |
@@ -162,17 +162,17 @@ LMSが返す `snake_case` を、クライアントは再帰的に `camelCase` �
 const detail = await client.getMyDetail();
 const items = detail.examResults?.items ?? [];
 
-// 同じ配列を直接取得する便利メソッド。
+// 模試成績の配列のみを取得する簡易メソッド。
 const exams = await client.getExamResults();
 ```
 
-一覧APIは `{ items: [...] }` が基本だけど、カレンダーと面談予約枠は `{ entries: [...] }` を返す。クライアントは両方を `.items` に統一している。元のレスポンス構造は `.raw` から参照できる。`/chats/me` は一覧ではなく単一オブジェクトなので `getMyChat()` を使う。
+多くの一覧APIは `{ items: [...] }` を返す。一方、カレンダーおよび面談予約枠のAPIは `{ entries: [...] }` を返す。クライアントは双方を `.items` に正規化し、元のレスポンス構造を `.raw` に保持する。`/chats/me` は単一オブジェクトを返すため、`getMyChat()` を使用する。
 
 ## API一覧
 
 ベースURL：`https://api.lms.sundai-edfu.com/api`
 
-以下は主な学生本人向けの**読み取りメソッド**。2026年10月23日に行った確認に基づくもの。`/documents/:id` など一部はフロントエンドの定義のみ確認できたもので、すべてのメソッドの実データ取得を保証するものではない。
+以下は学生本人向けの主な**読み取りメソッド**。2026年10月23日時点のフロントエンド解析および動作確認に基づく。`/documents/:id` など一部のエンドポイントはフロントエンド上の定義のみ確認しており、すべてのAPIについて実データの取得を検証したものではない。
 
 | クライアントのメソッド | HTTP | パス |
 | --- | --- | --- |
@@ -201,9 +201,9 @@ const exams = await client.getExamResults();
 | `listDocumentDirectories()` / `getDocument(id)` | GET | `/document_directories` / `/documents/:id` |
 | `getBooking(id)` / `getSubmission(id)` | GET | `/bookings/:id` / `/submissions/:id` |
 
-`fromDate` / `toDate` は `YYYYMMDD` 形式、`subjectId` は科目のID。`getHandoutFile()` の戻り値はJSONではなく `Response`（通常PDF）になる。
+`fromDate` および `toDate` には `YYYYMMDD` 形式の日付、`subjectId` には科目IDを指定する。`getHandoutFile()` はJSONではなく `Response`（通常はPDF）を返す。
 
-`markContactRead()`、`markChatRead()`、`updateSurvey()` のような**状態変更メソッド**もライブラリにはある。CLIでは呼ばれないけど、アプリから使う場合は実際にアカウントの状態が変更されるので注意。
+ライブラリには `markContactRead()`、`markChatRead()`、`updateSurvey()` などの**状態変更メソッド**も存在する。CLIからは呼び出されないが、プログラムから直接実行した場合はアカウントの状態が変更される。
 
 ## セキュリティ
 
@@ -222,8 +222,8 @@ bun run check
 bun test
 ```
 
-テストはモックレスポンスを使用するため、**駿台アカウントは不要**。push / Pull Request時は [GitHub Actions](https://github.com/linkalls/sundai-lms-client/actions/workflows/ci.yml) で型チェックとテストを実行する。
+テストにはモックレスポンスを使用するため、**駿台アカウントは不要**。pushおよびPull Request時には、[GitHub Actions](https://github.com/linkalls/sundai-lms-client/actions/workflows/ci.yml) により型チェックとテストが実行される。
 
 ## ライセンス
 
-このクライアントのソースコードは [MIT License](LICENSE)。駿台LMS、API、関連する商標やコンテンツは各権利者に帰属する。
+本クライアントのソースコードは [MIT License](LICENSE) で提供される。駿台LMS、API、関連する商標およびコンテンツの権利は各権利者に帰属する。
